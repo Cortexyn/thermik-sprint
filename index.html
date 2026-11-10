@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Thermik-Sprint 50 km</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Layout: one-screen app. Sky canvas takes all free height, instrument strip below, thumb controls at the bottom edge.
+     Landscape phones: controls move to a right-hand column. Single visual world (a flying day), so one theme. */
+  --panel:#12202e;      /* cockpit panel */
+  --panel-2:#1b2f42;    /* instrument well */
+  --ink:#e9f0f5;        /* text on panel */
+  --muted:#8fa6b8;      /* labels */
+  --signal:#ff7a1a;     /* wingtip orange, the accent */
+  --climb:#5fd38a;      /* semantic: lift */
+  --sink:#ff6b6b;       /* semantic: sink */
+  --display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--panel);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.4;
+  overscroll-behavior:none;-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+main{max-width:1040px;height:100%;margin:0 auto;display:flex;flex-direction:column;gap:10px;
+  padding:max(10px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 16px}
+h1{font-family:var(--display);font-weight:700;font-size:26px;letter-spacing:.02em;text-transform:uppercase;margin:0}
+h1 span{color:var(--signal)}
+#best{color:var(--muted);font-size:14px;font-variant-numeric:tabular-nums}
+.stage{position:relative;flex:1 1 auto;min-height:200px;border-radius:10px;overflow:hidden;background:#6db3e8;
+  user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+canvas{position:absolute;inset:0;display:block;width:100%;height:100%;touch-action:none}
+.tools{position:absolute;top:8px;right:8px;display:flex;gap:8px;z-index:3}
+.tools button{font-size:14px;padding:0 12px;min-height:40px;background:rgba(18,32,46,.72);border-color:rgba(255,255,255,.25)}
+.overlay{position:absolute;inset:0;z-index:2;display:flex;padding:12px;background:rgba(10,22,34,.55);overflow:auto;touch-action:pan-y}
+.overlay[hidden]{display:none}
+.card{margin:auto;background:var(--panel);border:1px solid #2c4660;border-radius:10px;padding:16px 18px;max-width:440px;display:flex;flex-direction:column;gap:10px}
+.card h2{font-family:var(--display);font-size:24px;text-transform:uppercase;letter-spacing:.03em;margin:0;text-wrap:balance}
+.card p{margin:0;color:#c6d4df}
+.card ul{margin:0;padding-left:18px;color:#c6d4df}
+.card ul[hidden],.card li[hidden]{display:none}
+kbd{font-family:var(--display);font-weight:600;background:var(--panel-2);border:1px solid #35516c;border-radius:4px;padding:0 6px}
+.row{display:flex;flex-wrap:wrap;gap:10px}
+form[hidden]{display:none}
+form{display:flex;flex-direction:column;gap:6px}
+label{font-size:13px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+input{flex:1 1 140px;min-width:0;min-height:48px;font:500 18px var(--body);color:var(--ink);background:var(--panel-2);border:1px solid #35516c;border-radius:10px;padding:8px 12px;user-select:text;-webkit-user-select:text}
+input:focus-visible{outline:3px solid var(--signal);outline-offset:2px}
+.board h3{font-family:var(--display);font-size:16px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 4px}
+.board ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;counter-reset:r}
+.board li{display:flex;gap:10px;align-items:baseline;padding:3px 8px;border-radius:6px;background:var(--panel-2);counter-increment:r}
+.board li::before{content:counter(r) ".";font-family:var(--display);color:var(--muted);min-width:1.6em;font-variant-numeric:tabular-nums}
+.board li span{flex:1;min-width:0;overflow-wrap:anywhere}
+.board li b{font-family:var(--display);font-size:18px;font-variant-numeric:tabular-nums}
+.board li.me{outline:1px solid var(--signal)}
+.board li.empty{color:var(--muted)} .board li.empty::before{content:""}
+.board small{display:block;margin-top:4px;color:var(--muted);font-size:12px}
+button{font-family:var(--display);font-weight:600;font-size:18px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink);
+  background:var(--panel-2);border:1px solid #35516c;border-radius:10px;padding:10px 16px;min-height:48px;cursor:pointer;
+  touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.card button{touch-action:manipulation}
+button:focus-visible{outline:3px solid var(--signal);outline-offset:2px}
+button.primary{background:var(--signal);border-color:var(--signal);color:#1a0d00}
+button[aria-pressed="true"]{border-color:var(--climb);color:var(--climb)}
+button.held{background:#2a4660;border-color:var(--ink)}
+.panel{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.inst{background:var(--panel-2);border-radius:8px;padding:6px 10px;min-width:0}
+.inst small{display:block;color:var(--muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+.inst b{font-family:var(--display);font-weight:600;font-size:28px;line-height:1.1;font-variant-numeric:tabular-nums;white-space:nowrap}
+.inst b i{font-style:normal;font-size:14px;color:var(--muted);margin-left:3px}
+.up b{color:var(--climb)} .down b{color:var(--sink)}
+.controls{display:grid;grid-template-columns:1fr 1fr 1.5fr;gap:8px}
+.controls button{min-height:64px;font-size:20px;padding:6px}
+#circle{background:#24405a;border-color:#4a6c8c}
+#circle.held{background:var(--climb);border-color:var(--climb);color:#062313}
+@media (max-width:700px){
+  .panel{grid-template-columns:repeat(3,1fr);gap:6px}
+  .inst b{font-size:24px}
+  h1{font-size:22px}
+}
+@media (orientation:landscape) and (max-height:520px){
+  main{display:grid;grid-template-columns:minmax(0,1fr) 128px;grid-template-rows:minmax(0,1fr) auto;gap:6px;
+    padding-top:max(6px,env(safe-area-inset-top));padding-bottom:max(6px,env(safe-area-inset-bottom))}
+  header{display:none}
+  .stage{grid-column:1;grid-row:1;min-height:0}
+  .panel{grid-column:1;grid-row:2;grid-template-columns:repeat(6,1fr);gap:6px}
+  .inst{padding:3px 8px} .inst b{font-size:20px} .inst b i{font-size:12px} .inst small{font-size:10px}
+  .controls{grid-column:2;grid-row:1/3;grid-template-columns:1fr;grid-template-rows:1fr 1fr 1.6fr}
+  .controls button{min-height:0}
+  .card{padding:12px 14px;gap:8px} .card h2{font-size:20px} .card p,.card ul{font-size:14px}
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Thermik-<span>Sprint</span> 50 km</h1>
+    <span id="best"></span>
+  </header>
+
+  <div class="stage" id="stage">
+    <canvas id="c" aria-label="Seitenansicht des Flugs"></canvas>
+    <div class="tools">
+      <button id="sound" aria-pressed="false">Ton aus</button>
+      <button id="full" hidden>Vollbild</button>
+    </div>
+    <div class="overlay" id="overlay">
+      <div class="card">
+        <h2 id="ovTitle">Startklar auf 1200 m</h2>
+        <p id="ovText">Fliege 50 km so schnell wie möglich. Unter jeder Wolke steht ein Bart, aber nicht jeder lohnt sich.</p>
+        <ul id="ovHelp">
+          <li>Himmel gedrückt halten: kreisen und steigen</li>
+          <li>Langsamer / Schneller halten: schneller kostet Höhe</li>
+          <li>Basis bei 1700 m, darüber geht nichts</li>
+          <li id="kbHint" hidden>Tastatur: <kbd>↑</kbd> <kbd>↓</kbd> Fahrt, <kbd>Leertaste</kbd> kreisen</li>
+        </ul>
+        <form id="nameForm" hidden>
+          <label for="pname">Name für die Bestenliste</label>
+          <div class="row">
+            <input id="pname" type="text" maxlength="16" autocomplete="nickname" enterkeyhint="done">
+            <button class="primary" type="submit" id="saveName">Eintragen</button>
+          </div>
+        </form>
+        <div class="board">
+          <h3 id="boardTitle">Bestenliste</h3>
+          <ol id="board"></ol>
+          <small id="boardNote"></small>
+        </div>
+        <div class="row">
+          <button class="primary" id="start">Losfliegen</button>
+          <button id="weather">Anderes Wetter</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" aria-live="off">
+    <div class="inst"><small>Höhe</small><b id="iH">1200<i>m</i></b></div>
+    <div class="inst"><small>Fahrt</small><b id="iV">110<i>km/h</i></b></div>
+    <div class="inst" id="varioBox"><small>Vario</small><b id="iVario">−0,7<i>m/s</i></b></div>
+    <div class="inst"><small>Strecke</small><b id="iX">0,0<i>km</i></b></div>
+    <div class="inst"><small>Zeit</small><b id="iT">00:00</b></div>
+    <div class="inst" id="finalBox"><small>Endanflug</small><b id="iF">−0<i>m</i></b></div>
+  </div>
+
+  <div class="controls">
+    <button id="slow" aria-label="Langsamer fliegen">Langsamer</button>
+    <button id="fast" aria-label="Schneller fliegen">Schneller</button>
+    <button id="circle" aria-label="Kreisen, gedrückt halten">Kreisen</button>
+  </div>
+</main>
+
+<script>
+(function(){
+"use strict";
+var stage=document.getElementById('stage'),cv=document.getElementById('c'),g=cv.getContext('2d');
+var COURSE=50000,BASE=1700,TIMEX=20;
+var W=960,H=540,KX=W/9000,GX=220,Y0=H-70,KY=(H-120)/2000,ZOOM=1;
+var touch=window.matchMedia&&window.matchMedia('(pointer:coarse)').matches;
+function resize(){
+  var r=stage.getBoundingClientRect(),dpr=Math.min(window.devicePixelRatio||1,2.5);
+  W=Math.max(200,Math.round(r.width));H=Math.max(160,Math.round(r.height));
+  cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);g.setTransform(dpr,0,0,dpr,0,0);
+  var view=Math.max(5000,Math.min(9000,W*9.4));   /* metres visible: phones see less, but larger */
+  KX=W/view;GX=W*0.23;
+  var ground=Math.max(36,Math.min(70,H*0.13));Y0=H-ground;KY=(Y0-46)/2000;
+  ZOOM=Math.max(0.8,Math.min(1.15,H/480));
+}
+function sx(wx){return GX+(wx-S.x)*KX}
+function sy(h){return Y0-h*KY}
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;var t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function hash(i){var r=rng(i*7919+13);return r()}
+
+var seed=7,thermals=[],S,keys={},holdCircle=false,holdStage=false,holdSlow=false,holdFast=false,trail=[];
+function makeWeather(){
+  var r=rng(seed*1000+1);thermals=[];var x=1800+r()*1500;
+  while(x<COURSE-1500){
+    thermals.push({x:x,str:0.8+Math.pow(r(),1.3)*3.6,rad:420+r()*280,ph:r()*6});
+    x+=2600+r()*3600;
+  }
+}
+function reset(){S={x:0,h:1200,v:110,t:0,vario:-0.7,circ:false,phase:0,mode:'ready',inLift:false};trail=[];}
+function polar(v){var d=v-85;return 0.6+0.0001815*d*d}
+function air(x){
+  var a=0;
+  for(var i=0;i<thermals.length;i++){var T=thermals[i],dx=Math.abs(x-T.x);if(dx>T.rad*4)continue;
+    var core=T.str*Math.exp(-(dx/T.rad)*(dx/T.rad));
+    var ring=-0.35*T.str*Math.exp(-Math.pow((dx-2.1*T.rad)/T.rad,2));
+    a+=core+ring;}
+  return a;
+}
+function fmtT(t){var m=Math.floor(t/60),s=Math.floor(t%60);return(m<10?'0':'')+m+':'+(s<10?'0':'')+s}
+function de(n,d){return n.toFixed(d).replace('.',',').replace('-','−')}
+function buzz(p){try{if(navigator.vibrate)navigator.vibrate(p)}catch(e){}}
+
+/* ---------- audio vario ---------- */
+var AC=null,osc=null,gain=null,soundOn=false,beep=0;
+function initAudio(){
+  if(AC||!soundOn)return;
+  try{AC=new (window.AudioContext||window.webkitAudioContext)();osc=AC.createOscillator();gain=AC.createGain();
+    osc.type='sine';gain.gain.value=0;osc.connect(gain);gain.connect(AC.destination);osc.start();}catch(e){AC=null}
+}
+function audioTick(dt){
+  if(!AC)return;var target=0,f=400;
+  if(soundOn&&S.mode==='fly'&&!document.hidden){
+    if(S.vario>0.2){f=600+S.vario*180;beep+=dt*(2.5+S.vario*1.6);target=(beep%1)<0.5?0.07:0;}
+    else if(S.vario<-2){f=210;target=0.035;}
+  }
+  osc.frequency.setTargetAtTime(f,AC.currentTime,0.02);gain.gain.setTargetAtTime(target,AC.currentTime,0.015);
+}
+
+/* ---------- simulation ---------- */
+function step(rdt){
+  if(S.mode!=='fly')return;
+  var dv=0;if(keys.ArrowUp||keys.ArrowRight||holdFast)dv+=1;if(keys.ArrowDown||keys.ArrowLeft||holdSlow)dv-=1;
+  S.v=Math.max(80,Math.min(220,S.v+dv*70*rdt));
+  S.circ=!!(keys[' ']||holdCircle||holdStage);
+  var dt=rdt*TIMEX,a=air(S.x),sink=S.circ?0.75:polar(S.v),vx=S.circ?0:S.v/3.6;
+  var vz=a-sink; if(S.h>=BASE&&vz>0)vz=0;
+  S.vario+=(vz-S.vario)*Math.min(1,rdt*6);
+  S.h=Math.min(BASE,S.h+vz*dt);S.x+=vx*dt;S.t+=dt;
+  if(S.circ)S.phase+=rdt*5;else S.phase=0;
+  var lift=a>1.0; if(lift&&!S.inLift)buzz(18); S.inLift=lift;   /* a nudge in the seat when a thermal starts */
+  var last=trail[trail.length-1];
+  if(!last||S.x-last.x>120||Math.abs(S.h-last.h)>12)trail.push({x:S.x,h:S.h});
+  if(trail.length>600)trail.shift();
+  if(S.x>=COURSE){S.mode='done';finish(true)}
+  else if(S.h<=0){S.h=0;S.mode='out';finish(false)}
+}
+function bestKey(){return 'thermik-best-'+seed}
+function getBest(){try{var b=parseFloat(localStorage.getItem(bestKey()));return isFinite(b)?b:null}catch(e){return null}}
+function showBest(){var b=getBest();document.getElementById('best').textContent='Wetter Nr. '+seed+(b?' · Bestzeit '+fmtT(b):'')}
+function finish(ok){
+  holdStage=false;
+  document.getElementById('ovHelp').hidden=true;
+  if(ok){
+    var avg=COURSE/S.t*3.6,b=getBest(),rec=!b||S.t<b;
+    if(rec){try{localStorage.setItem(bestKey(),String(S.t))}catch(e){}}
+    document.getElementById('ovTitle').textContent='Ziel erreicht in '+fmtT(S.t);
+    document.getElementById('ovText').textContent='Schnitt '+de(avg,1)+' km/h, Ankunftshöhe '+Math.round(S.h)+' m.'+(rec&&b?' Neue Bestzeit.':'')+(S.h>300?' Die Resthöhe hättest du in Fahrt umsetzen können.':'');
+    buzz(70);pendingT=S.t;document.getElementById('nameForm').hidden=false;document.getElementById('saveName').disabled=false;
+  }else{
+    document.getElementById('ovTitle').textContent='Außenlandung nach '+de(S.x/1000,1)+' km';
+    document.getElementById('ovText').textContent='Der Acker war lang genug. Der Rückholer braucht jetzt den Hänger und etwas Geduld.';
+    buzz([80,50,80]);
+  }
+  document.getElementById('start').textContent='Nochmal';
+  document.getElementById('overlay').hidden=false;showBest();
+}
+
+/* ---------- drawing ---------- */
+function cloud(cx,cy,s,str){
+  var grey=str<1.6;g.fillStyle=grey?'rgba(214,222,230,.8)':'rgba(255,255,255,.95)';
+  var w=(26+s*16)*ZOOM,h=(grey?8+s*3:10+s*9)*ZOOM;
+  g.beginPath();
+  g.ellipse(cx-w*0.55,cy-h*0.35,w*0.5,h*0.6,0,0,7);
+  g.ellipse(cx,cy-h*0.75,w*0.6,h,0,0,7);
+  g.ellipse(cx+w*0.55,cy-h*0.4,w*0.5,h*0.65,0,0,7);
+  g.rect(cx-w,cy-h*0.35,w*2,h*0.35);g.fill();
+  g.fillStyle=grey?'rgba(150,165,180,.5)':'rgba(170,190,210,.55)';g.fillRect(cx-w,cy-2,w*2,3);
+}
+function glider(px,py){
+  g.save();g.translate(px,py);
+  var sxn=S.circ?Math.cos(S.phase):1;if(Math.abs(sxn)<0.12)sxn=sxn<0?-0.12:0.12;
+  g.rotate(S.circ?0:(S.v-100)*0.0016);g.scale(sxn*ZOOM,ZOOM);
+  g.fillStyle='#fff';g.strokeStyle='#22364a';g.lineWidth=1.2;
+  g.beginPath();g.moveTo(22,1);g.quadraticCurveTo(16,-6,4,-5);g.lineTo(-24,-2);g.lineTo(-28,-13);g.lineTo(-23,-13);g.lineTo(-19,-1);
+  g.lineTo(-22,2);g.quadraticCurveTo(6,7,22,1);g.closePath();g.fill();g.stroke();
+  g.fillStyle='#7fb8e6';g.beginPath();g.moveTo(17,-1);g.quadraticCurveTo(12,-5,4,-4.5);g.lineTo(5,-1);g.closePath();g.fill();
+  g.fillStyle='#fff';g.fillRect(-31,-14.5,10,2);g.strokeRect(-31,-14.5,10,2);
+  g.fillStyle='#fff';g.fillRect(-8,-2.5,16,2.6);g.strokeRect(-8,-2.5,16,2.6);
+  g.fillStyle='#ff7a1a';g.fillRect(-8,-2.5,4,2.6);
+  g.restore();
+}
+function draw(){
+  var sky=g.createLinearGradient(0,0,0,Y0);sky.addColorStop(0,'#3f8fd6');sky.addColorStop(1,'#bfe0f5');
+  g.fillStyle=sky;g.fillRect(0,0,W,H);
+  /* distant hills, slow parallax */
+  g.fillStyle='#8fb7a8';g.beginPath();g.moveTo(0,Y0);
+  for(var px=0;px<=W+12;px+=12){var wx=(px/KX+S.x*0.35)/1000;g.lineTo(px,Y0-18-10*Math.sin(wx*1.3)-7*Math.sin(wx*3.1+1))}
+  g.lineTo(W,Y0);g.fill();
+  /* cloudbase line */
+  g.strokeStyle='rgba(255,255,255,.35)';g.setLineDash([6,8]);g.beginPath();g.moveTo(0,sy(BASE));g.lineTo(W,sy(BASE));g.stroke();g.setLineDash([]);
+  g.fillStyle='rgba(255,255,255,.85)';g.font='600 13px "Barlow Condensed",sans-serif';g.fillText('BASIS 1700 m',10,sy(BASE)+16);
+  /* km markers */
+  var k0=Math.floor((S.x-GX/KX)/5000),k1=Math.ceil((S.x+(W-GX)/KX)/5000);
+  for(var k=k0;k<=k1;k++){if(k<=0||k*5000>=COURSE)continue;var mx=sx(k*5000);
+    g.strokeStyle='rgba(18,32,46,.18)';g.beginPath();g.moveTo(mx,sy(BASE)+10);g.lineTo(mx,Y0);g.stroke();
+    g.fillStyle='rgba(18,32,46,.6)';g.fillText((k*5)+' km',mx+5,Y0-8);}
+  /* fields */
+  var f0=Math.floor((S.x-GX/KX)/700)-1,f1=Math.ceil((S.x+(W-GX)/KX)/700);
+  var cols=['#6f9e4c','#86ad55','#c9b862','#5d8f47','#a8b85a','#7a9a3e'];
+  for(var f=f0;f<=f1;f++){g.fillStyle=cols[Math.floor(hash(f)*cols.length)];g.fillRect(sx(f*700),Y0,700*KX+1,H-Y0)}
+  g.fillStyle='rgba(30,60,30,.25)';g.fillRect(0,Y0,W,3);
+  /* finish airfield */
+  var fx=sx(COURSE);if(fx<W+200){g.fillStyle='#4f7f3d';g.fillRect(fx-10,Y0,220,H-Y0);g.fillStyle='#e9f0f5';g.fillRect(fx,Y0+12,180,5);
+    g.strokeStyle='#12202e';g.lineWidth=2;g.beginPath();g.moveTo(fx,Y0);g.lineTo(fx,Y0-70);g.stroke();
+    g.fillStyle='#ff7a1a';g.beginPath();g.moveTo(fx,Y0-70);g.lineTo(fx+34,Y0-60);g.lineTo(fx,Y0-50);g.fill();
+    g.fillStyle='#12202e';g.font='700 16px "Barlow Condensed",sans-serif';g.fillText('ZIEL EDXE',fx+8,Y0-76);g.lineWidth=1;}
+  /* thermals + clouds */
+  for(var i=0;i<thermals.length;i++){var T=thermals[i],cx=sx(T.x);if(cx<-140||cx>W+140)continue;
+    if(Math.abs(S.x-T.x)<T.rad*1.2){var w=T.rad*KX;var col=g.createLinearGradient(cx-w,0,cx+w,0);
+      col.addColorStop(0,'rgba(255,255,255,0)');col.addColorStop(.5,'rgba(255,255,255,'+(0.08+T.str*0.04)+')');col.addColorStop(1,'rgba(255,255,255,0)');
+      g.fillStyle=col;g.fillRect(cx-w,sy(BASE),w*2,Y0-sy(BASE));}
+    cloud(cx,sy(BASE)-4,T.rad/420,T.str);}
+  /* trail */
+  if(trail.length>1){g.strokeStyle='rgba(255,122,26,.75)';g.lineWidth=1.6;g.beginPath();
+    for(var j=0;j<trail.length;j++){var tx=sx(trail[j].x),ty=sy(trail[j].h);if(j)g.lineTo(tx,ty);else g.moveTo(tx,ty)}
+    g.lineTo(GX,sy(S.h));g.stroke();g.lineWidth=1;}
+  /* shadow + glider */
+  g.fillStyle='rgba(0,0,0,.18)';g.beginPath();g.ellipse(GX,Y0+6,16*ZOOM,3,0,0,7);g.fill();
+  glider(GX,sy(S.h)-4);
+}
+var hudCache={};
+function setTxt(id,v){if(hudCache[id]!==v){hudCache[id]=v;document.getElementById(id).firstChild.nodeValue=v}}
+function setCls(id,v){if(hudCache[id]!==v){hudCache[id]=v;document.getElementById(id).className=v}}
+function hud(){
+  setTxt('iH',String(Math.round(S.h)));
+  setTxt('iV',S.circ?'kreist':String(Math.round(S.v)));
+  var u=S.circ?'none':'';if(hudCache.vu!==u){hudCache.vu=u;document.getElementById('iV').lastChild.style.display=u}
+  setTxt('iVario',(S.vario>=0?'+':'')+de(S.vario,1));
+  setCls('varioBox','inst '+(S.vario>0.1?'up':S.vario<-1.5?'down':''));
+  setTxt('iX',de(Math.min(S.x,COURSE)/1000,1));
+  setTxt('iT',fmtT(S.t));
+  var v=S.circ?110:S.v,need=(COURSE-S.x)/((v/3.6)/polar(v)),diff=S.h-need;
+  setTxt('iF',(diff>=0?'+':'')+de(Math.round(diff/10)*10,0));
+  setCls('finalBox','inst '+(diff>=0?'up':''));
+  var cb=(holdCircle||holdStage||keys[' '])&&S.mode==='fly';
+  if(hudCache.cb!==cb){hudCache.cb=cb;document.getElementById('circle').classList.toggle('held',!!cb)}
+}
+var lastT=0;
+function frame(ts){
+  var rdt=Math.min(0.05,(ts-lastT)/1000||0);lastT=ts;
+  step(rdt);audioTick(rdt);draw();hud();requestAnimationFrame(frame);
+}
+
+/* ---------- input ---------- */
+function resumeAudio(){initAudio();if(AC&&AC.state==='suspended'){try{AC.resume()}catch(e){}}}
+function start(){document.getElementById('nameForm').hidden=true;reset();S.mode='fly';document.getElementById('overlay').hidden=true;resumeAudio();
+  try{if(navigator.wakeLock)navigator.wakeLock.request('screen').catch(function(){})}catch(e){}}
+document.getElementById('start').addEventListener('click',start);
+document.getElementById('weather').addEventListener('click',function(){seed++;makeWeather();reset();showBest();document.getElementById('nameForm').hidden=true;renderBoard();
+  document.getElementById('ovTitle').textContent='Startklar auf 1200 m';
+  document.getElementById('ovText').textContent='Neues Wetter Nr. '+seed+'. Gleiche Strecke, andere Bärte.';
+  document.getElementById('start').textContent='Losfliegen';});
+window.addEventListener('keydown',function(e){
+  if(e.target&&e.target.tagName==='INPUT')return;
+  if([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].indexOf(e.key)>=0){
+    if(e.target&&e.target.tagName==='BUTTON'&&e.key===' '&&S.mode!=='fly')return;
+    keys[e.key]=true;e.preventDefault();}
+  if((e.key==='Enter'||e.key==='r'||e.key==='R')&&S.mode!=='fly'){e.preventDefault();start()}
+});
+window.addEventListener('keyup',function(e){keys[e.key]=false});
+function releaseAll(){keys={};holdCircle=holdStage=holdSlow=holdFast=false;
+  ['slow','fast'].forEach(function(id){document.getElementById(id).classList.remove('held')})}
+window.addEventListener('blur',releaseAll);
+document.addEventListener('visibilitychange',function(){if(document.hidden){releaseAll();if(AC){try{AC.suspend()}catch(e){}}}else if(soundOn)resumeAudio()});
+function hold(el,set,mark){
+  el.addEventListener('pointerdown',function(e){e.preventDefault();try{el.setPointerCapture(e.pointerId)}catch(x){}set(true);if(mark)el.classList.add('held')});
+  ['pointerup','pointercancel','lostpointercapture'].forEach(function(n){el.addEventListener(n,function(){set(false);if(mark)el.classList.remove('held')})});
+  el.addEventListener('contextmenu',function(e){e.preventDefault()});
+}
+hold(document.getElementById('circle'),function(v){holdCircle=v},false);
+hold(document.getElementById('slow'),function(v){holdSlow=v},true);
+hold(document.getElementById('fast'),function(v){holdFast=v},true);
+hold(cv,function(v){holdStage=v&&S.mode==='fly'},false);       /* hold anywhere on the sky to circle */
+document.addEventListener('gesturestart',function(e){e.preventDefault()});
+document.getElementById('sound').addEventListener('click',function(){
+  soundOn=!soundOn;this.setAttribute('aria-pressed',soundOn);this.textContent=soundOn?'Ton an':'Ton aus';resumeAudio();});
+var fullBtn=document.getElementById('full'),root=document.documentElement;
+if(document.fullscreenEnabled&&root.requestFullscreen){fullBtn.hidden=false;
+  fullBtn.addEventListener('click',function(){try{
+    if(document.fullscreenElement)document.exitFullscreen();
+    else root.requestFullscreen().then(function(){try{screen.orientation.lock('landscape').catch(function(){})}catch(e){}}).catch(function(){});
+  }catch(e){}});}
+if(!touch&&!('ontouchstart' in window)&&!(navigator.maxTouchPoints>0))document.getElementById('kbHint').hidden=false;
+
+
+/* ---------- leaderboard: shared via db when available, else on this device ---------- */
+var LB={db:null,uid:null,docs:[],state:'local',busy:false,note:''},pendingT=0;
+function localRuns(){try{var o=JSON.parse(localStorage.getItem('thermik-scores'));return o&&typeof o==='object'?o:{}}catch(e){return {}}}
+function addRun(runs,name,t){
+  var k=String(seed),a=Array.isArray(runs[k])?runs[k].slice():[],low=name.toLowerCase(),hit=false;
+  a=a.map(function(e){if(e&&String(e.name).toLowerCase()===low){hit=true;return {name:name,t:Math.min(Number(e.t)||t,t)}}return e});
+  if(!hit)a.push({name:name,t:t});
+  a=a.filter(function(e){return e&&isFinite(e.t)}).sort(function(x,y){return x.t-y.t}).slice(0,5);
+  runs[k]=a;return runs;
+}
+function boardEntries(){
+  var out=[],k=String(seed);
+  function take(list,mine){if(!Array.isArray(list))return;list.forEach(function(e){
+    if(!e||typeof e.name!=='string')return;var t=Number(e.t);
+    if(!isFinite(t)||t<800||t>86400)return;                    /* faster than the polar allows: not a flight */
+    out.push({name:e.name.trim().slice(0,16)||'Unbekannt',t:t,mine:mine})})}
+  if(LB.state==='shared'||LB.state==='readonly')LB.docs.forEach(function(d){take(d.runs&&d.runs[k],d.id===LB.uid)});
+  if(LB.state!=='shared')take(localRuns()[k],true);
+  out.sort(function(x,y){return x.t-y.t});return out.slice(0,8);
+}
+function renderBoard(){
+  document.getElementById('boardTitle').textContent='Bestenliste Wetter Nr. '+seed;
+  var ol=document.getElementById('board'),list=boardEntries();ol.textContent='';
+  if(!list.length){var li=document.createElement('li');li.className='empty';li.textContent='Noch kein Eintrag für dieses Wetter.';ol.appendChild(li)}
+  list.forEach(function(e){var li=document.createElement('li'),n=document.createElement('span'),b=document.createElement('b');
+    if(e.mine)li.className='me';n.textContent=e.name;b.textContent=fmtT(e.t);li.appendChild(n);li.appendChild(b);ol.appendChild(li)});
+  var note=LB.note||(LB.state==='shared'?'Gemeinsame Liste für alle, die diese Seite öffnen.':
+    LB.state==='loading'?'Gemeinsame Liste wird geladen …':
+    LB.state==='readonly'?'Du kannst die gemeinsame Liste lesen, eigene Zeiten bleiben auf diesem Gerät.':
+    'Liste nur auf diesem Gerät gespeichert.');
+  document.getElementById('boardNote').textContent=note;
+}
+function saveLocal(name,t){try{localStorage.setItem('thermik-scores',JSON.stringify(addRun(localRuns(),name,t)))}catch(e){}}
+function submitScore(name,t){
+  try{localStorage.setItem('thermik-name',name)}catch(e){}
+  if(LB.state!=='shared'||LB.busy){saveLocal(name,t);renderBoard();return}
+  var mine=null;LB.docs.forEach(function(d){if(d.id===LB.uid)mine=d});
+  var runs={};try{runs=JSON.parse(JSON.stringify((mine&&mine.runs)||{}))}catch(e){}
+  if(!runs||typeof runs!=='object'||Array.isArray(runs))runs={};
+  addRun(runs,name,t);LB.busy=true;
+  LB.db.doc('scores/'+LB.uid).set({runs:runs}).then(function(){LB.busy=false},function(err){
+    LB.busy=false;saveLocal(name,t);
+    if(err&&err.code==='invalid_argument')LB.state='readonly';else LB.note='Speichern in der gemeinsamen Liste hat nicht geklappt, Zeit liegt auf diesem Gerät.';
+    renderBoard();});
+}
+document.getElementById('nameForm').addEventListener('submit',function(e){
+  e.preventDefault();var inp=document.getElementById('pname'),name=inp.value.replace(/\s+/g,' ').trim().slice(0,16);
+  if(!name){inp.focus();return}
+  if(!pendingT)return;var t=Math.round(pendingT*10)/10;pendingT=0;
+  inp.blur();this.hidden=true;submitScore(name,t);
+});
+try{document.getElementById('pname').value=localStorage.getItem('thermik-name')||''}catch(e){}
+function connectBoard(){
+  var c=window.claude;if(!c||typeof c.use!=='function')return;
+  LB.state='loading';renderBoard();
+  Promise.all([c.use('db'),c.use('user')]).then(function(r){
+    var db=r[0],user=r[1];if(!db){LB.state='local';renderBoard();return}
+    LB.db=db;
+    return Promise.resolve(user?user.id():null).then(function(uid){
+      LB.uid=uid||null;
+      var timer=setTimeout(function(){if(LB.state==='loading'){LB.state='local';LB.note='Gemeinsame Liste gerade nicht erreichbar, zeige die Einträge dieses Geräts.';renderBoard()}},10000);
+      db.collection('scores').onSnapshot(function(snap){
+        LB.docs=snap.docs.map(function(d){var x=d.data()||{};return {id:d.id,runs:x.runs}});
+        if(!snap.metadata||!snap.metadata.fromCache){clearTimeout(timer);LB.note=''}
+        if(LB.state==='loading'||LB.state==='local')LB.state=LB.uid?'shared':'readonly';
+        renderBoard();
+      },function(){clearTimeout(timer);LB.state='local';LB.note='';renderBoard()});
+    });
+  }).catch(function(){LB.state='local';renderBoard()});
+}
+
+if(window.ResizeObserver)new ResizeObserver(resize).observe(stage);
+window.addEventListener('resize',resize);window.addEventListener('orientationchange',function(){setTimeout(resize,200)});
+makeWeather();reset();resize();showBest();renderBoard();connectBoard();requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
